@@ -165,9 +165,10 @@
   <script>
     const map = L.map('map', {
       maxBounds: [
-        [24.396308, -87.634938], // Southwest corner of Florida
-        [31.000968, -79.974307]  // Northeast corner of Florida
-      ],
+  [25.0, -90.0], // Southwest corner of the expanded boundary
+  [32.0, -80.0]  // Northeast corner of the expanded boundary
+],
+
       maxBoundsViscosity: 1.0,
       minZoom: 7 // Prevent zooming out beyond the default level
     }).setView([27.994402, -81.760254], 7);
@@ -242,141 +243,164 @@
   "334": "Southeast", // Palm Beach County
 };
 
-    // Define colors for regions
-    const regionColors = {
-      Northwest: "#FF9999",
-      "North Central": "#99FF99",
-      Northeast: "#9999FF",
-      "Central West": "#FFFF99",
-      "Central East": "#FFC299",
-      Central: "#66B2FF",
-      Southwest: "#FF66B2",
-      Southeast: "#FFCC66",
-      Default: "#CCCCCC" // Fallback color
-    };
+   // Define colors for regions
+const regionColors = {
+  Northwest: "#FF9999",
+  "North Central": "#99FF99",
+  Northeast: "#9999FF",
+  "Central West": "#FFFF99",
+  "Central East": "#FFC299",
+  Central: "#66B2FF",
+  Southwest: "#FF66B2",
+  Southeast: "#FFCC66",
+  Default: "#CCCCCC" // Fallback color
+};
 
-    // Populate the legend
-    function populateLegend() {
-      const legend = document.getElementById('legend');
-      Object.keys(regionColors).forEach(region => {
-        const div = document.createElement('div');
-        div.innerHTML = `<span style="background-color: ${regionColors[region]}"></span>${region}`;
-        legend.appendChild(div);
-      });
+// Populate the legend
+function populateLegend() {
+  const legend = document.getElementById('legend');
+  Object.keys(regionColors).forEach(region => {
+    const div = document.createElement('div');
+    div.innerHTML = `<span style="background-color: ${regionColors[region]}"></span>${region}`;
+    legend.appendChild(div);
+  });
+}
+populateLegend();
+
+// Determine the region from the ZIP code prefix
+function getRegion(zipCode) {
+  const prefix = zipCode.slice(0, 3); // Extract the first 3 digits of the ZIP
+  return zipToRegion[prefix] || "Default";
+}
+
+// Fetch city data from cityandzip.json
+let cityData = [];
+fetch('cityandzip.json')
+  .then(response => {
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
-    populateLegend();
+    return response.json();
+  })
+  .then(data => {
+    cityData = data;
+  })
+  .catch(error => console.error('Error loading city data:', error));
 
-    // Determine the region from the ZIP code prefix
-    function getRegion(zipCode) {
-      const prefix = zipCode.slice(0, 3); // Extract the first 3 digits of the ZIP
-      return zipToRegion[prefix] || "Default";
-    }
+// Function to get city by ZIP code
+function getCityByZip(zipCode) {
+  const cityEntry = cityData.find(entry => entry.zipcodes.includes(zipCode));
+  return cityEntry ? cityEntry.city : 'Unknown City';
+}
 
-    // Style function for Florida ZIP codes
-    function style(feature) {
-      const zipCode = feature.properties.ZCTA5CE20.trim();
-      const region = getRegion(zipCode); // Get region based on ZIP
-      const fillColor = regionColors[region]; // Get color for region
+// Style function for Florida ZIP codes
+function style(feature) {
+  const zipCode = feature.properties.ZCTA5CE20.trim();
+  const region = getRegion(zipCode); // Get region based on ZIP
+  const fillColor = regionColors[region]; // Get color for region
 
-      return {
-        fillColor: fillColor,
-        weight: 2,
-        opacity: 1,
-        color: "white",
-        fillOpacity: 0.8, // Increased opacity
-      };
-    }
+  return {
+    fillColor: fillColor,
+    weight: 2,
+    opacity: 1,
+    color: "white",
+    fillOpacity: 0.8, // Increased opacity
+  };
+}
 
-    // Highlight feature on hover
-    function highlightFeature(e) {
-      const layer = e.target;
-      layer.setStyle({
-        weight: 3,
-        color: '#666',
-        fillOpacity: 0.9
-      });
-    }
+// Highlight feature on hover
+function highlightFeature(e) {
+  const layer = e.target;
+  layer.setStyle({
+    weight: 3,
+    color: '#666',
+    fillOpacity: 0.9
+  });
+}
 
-    // Reset highlight on mouseout
-    function resetHighlight(e) {
-      geojson.resetStyle(e.target);
-    }
+// Reset highlight on mouseout
+function resetHighlight(e) {
+  geojson.resetStyle(e.target);
+}
 
-    // Function for click event
-    function onFeatureClick(e) {
-      const zipCode = e.target.feature.properties.ZCTA5CE20.trim();
-      const technicians = technicianData[zipCode] || ['No technician assigned'];
-      const technicianList = technicians.join(', ');
-      showDialog(`ZIP Code: ${zipCode}<br>Assigned Technicians: ${technicianList}`);
-    }
+// Function for click event
+function onFeatureClick(e) {
+  const zipCode = e.target.feature.properties.ZCTA5CE20.trim();
+  const technicians = technicianData[zipCode] || ['No technician assigned'];
+  const technicianList = technicians.join(', ');
+  showDialog(`ZIP Code: ${zipCode}<br>Assigned Technicians: ${technicianList}`);
+}
 
-    // Attach events to each feature
-    function onEachFeature(feature, layer) {
-      const zipCode = feature.properties.ZCTA5CE20.trim();
-      const cityName = feature.properties.CITY || 'Unknown City';
+// Attach events to each feature
+function onEachFeature(feature, layer) {
+  const zipCode = feature.properties.ZCTA5CE20.trim();
+  const cityName = getCityByZip(zipCode); // Fetch city from ZIP code
 
-      layer.on({
-        mouseover: function (e) {
-          highlightFeature(e);
-          const tooltipContent = `<strong>City:</strong> ${cityName}<br><strong>ZIP Code:</strong> ${zipCode}`;
-          layer.bindTooltip(tooltipContent, {
-            permanent: false,
-            direction: 'top',
-            className: 'custom-tooltip'
-          }).openTooltip(e.latlng);
-        },
-        mouseout: function (e) {
-          resetHighlight(e);
-          layer.unbindTooltip();
-        },
-        click: onFeatureClick
-      });
-    }
+  layer.on({
+    mouseover: function (e) {
+      highlightFeature(e);
+      const tooltipContent = `<strong>City:</strong> ${cityName}<br><strong>ZIP Code:</strong> ${zipCode}`;
+      layer.bindTooltip(tooltipContent, {
+        permanent: false,
+        direction: 'top',
+        className: 'custom-tooltip'
+      }).openTooltip(e.latlng);
+    },
+    mouseout: function (e) {
+      resetHighlight(e);
+      layer.unbindTooltip();
+    },
+    click: onFeatureClick
+  });
+}
 
-    // Load Florida-only GeoJSON
-    fetch('florida_only_zipcodes.geojson')
-      .then(response => response.json())
-      .then(data => {
-        geojson = L.geoJson(data, {
-          style: style,
-          onEachFeature: onEachFeature
-        }).addTo(map);
-      })
-      .catch(err => console.error('Error loading GeoJSON:', err));
+// Load Florida-only GeoJSON
+fetch('florida_only_zipcodes.geojson')
+  .then(response => response.json())
+  .then(data => {
+    geojson = L.geoJson(data, {
+      style: style,
+      onEachFeature: onEachFeature
+    }).addTo(map);
+  })
+  .catch(err => console.error('Error loading GeoJSON:', err));
 
-    // Search functionality
-    function searchTechnician() {
-      const query = document.getElementById('searchInput').value.trim();
-      const technicians = technicianData[query];
+// Search functionality
+function searchTechnician() {
+  const query = document.getElementById('searchInput').value.trim();
+  const technicians = technicianData[query];
 
-      if (technicians) {
-        const technicianList = technicians.join(', ');
-        showDialog(`ZIP Code: ${query}<br>Assigned Technicians: ${technicianList}`);
-      } else {
-        showDialog('No technician assigned for the entered ZIP Code.');
-      }
-    }
+  if (technicians) {
+    const technicianList = technicians.join(', ');
+    showDialog(`ZIP Code: ${query}<br>Assigned Technicians: ${technicianList}`);
+  } else {
+    const cityName = getCityByZip(query);
+    const cityInfo = cityName !== 'Unknown City' ? `City: ${cityName}` : 'No information available';
+    showDialog(`${cityInfo}<br>No technician assigned for the entered ZIP Code.`);
+  }
+}
 
-    // Function to close the dialog
-    function closeDialog() {
-      const dialog = document.getElementById('dialogBox');
-      dialog.close();
-    }
+// Function to close the dialog
+function closeDialog() {
+  const dialog = document.getElementById('dialogBox');
+  dialog.close();
+}
 
-    // Handle key press (Enter key to trigger search)
-    function handleKeyPress(event) {
-      if (event.key === 'Enter') {
-        searchTechnician();
-      }
-    }
+// Handle key press (Enter key to trigger search)
+function handleKeyPress(event) {
+  if (event.key === 'Enter') {
+    searchTechnician();
+  }
+}
 
-    // Function to show dialog with content
-    function showDialog(content) {
-      const dialog = document.getElementById('dialogBox');
-      const dialogContent = document.getElementById('dialogContent');
-      dialogContent.innerHTML = content;
-      dialog.showModal();
-    }
+// Function to show dialog with content
+function showDialog(content) {
+  const dialog = document.getElementById('dialogBox');
+  const dialogContent = document.getElementById('dialogContent');
+  dialogContent.innerHTML = content;
+  dialog.showModal();
+}
+
     
   </script>
 </body>
